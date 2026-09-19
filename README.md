@@ -4,7 +4,7 @@ Minimal React frontend with a FastAPI document service.
 
 ## Requirements
 
-Install Python 3.11+ and Node.js/npm.
+Install Python 3.11+ and Node.js/npm. On restricted PowerShell systems, Node.js is assumed to be extracted to `$env:USERPROFILE\nodejs`.
 
 ## Run FastAPI
 
@@ -22,8 +22,9 @@ The document service runs at `http://localhost:8000`.
 
 ```powershell
 cd frontend
-npm install
-npm run dev
+$env:Path = "$env:USERPROFILE\nodejs;$env:Path"
+npm.cmd install
+npm.cmd run dev
 ```
 
 Open `http://localhost:5173`. Use `demo@example.com` with password `password`.
