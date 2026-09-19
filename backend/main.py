@@ -3,14 +3,32 @@ from pathlib import Path
 import hashlib
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 app = FastAPI(title="Document Service")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_FILE_SIZE = 10 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}
 DOCUMENTS: list[dict] = []
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/auth/login")
+def login(request: LoginRequest) -> dict[str, str]:
+    if request.email != "demo@example.com" or request.password != "password":
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return {"user": request.email}
 
 @app.get("/health")
 def health() -> dict[str, str]:
