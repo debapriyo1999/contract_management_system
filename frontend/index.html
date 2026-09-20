@@ -1,2 +1,70 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Document Desk</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f4f2ec;color:#17211f}main{max-width:1100px;margin:auto;padding:48px 24px}.auth{min-height:100vh;display:grid;grid-template-columns:1fr 360px;gap:80px;align-items:center;max-width:1200px}.card{background:#fffdf8;border:1px solid #d9ddd4;padding:32px}h1{font-size:clamp(2.5rem,6vw,5rem);margin:0 0 24px}h2,p{margin:0}.muted,small{color:#68736e}.eyebrow{color:#1f6d68;font-size:12px;font-weight:bold;letter-spacing:2px}input{display:block;width:100%;box-sizing:border-box;padding:12px;margin:14px 0;border:1px solid #d9ddd4}button{padding:13px 18px;background:#1f6d68;color:white;border:0;font-weight:bold;cursor:pointer;margin-top:14px}.outline{background:transparent;color:#1f6d68;border:1px solid #1f6d68}.message{color:#1f6d68}.card small{display:block;color:#68736e;font-size:.8rem;margin-top:18px}.header{display:flex;justify-content:space-between;align-items:end;border-bottom:1px solid #d9ddd4;margin-bottom:32px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.drop{display:block;border:1px dashed #9daaa2;padding:40px 16px;text-align:center;color:#68736e;cursor:pointer;margin-top:24px}.drop input{display:none}.heading,li{display:flex;justify-content:space-between;gap:18px}ul{list-style:none;padding:0}li{border-top:1px solid #d9ddd4;padding:16px 0}li small,li b{display:block}em{color:#387443;font-style:normal;text-transform:uppercase;font-size:12px}@media(max-width:700px){.auth,.grid{grid-template-columns:1fr}.auth{gap:32px}.header{align-items:start}}</style></head><body><div id="root"></div><script type="module" src="/src/app.jsx"></script></body></html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document Desk</title>
+		<style>
+			:root {
+				color: #1b2b2a;
+				background: #edf2ef;
+				font-family: "Trebuchet MS", Verdana, sans-serif;
+				font-synthesis: none;
+			}
+
+			* { box-sizing: border-box; }
+			body { margin: 0; background: linear-gradient(135deg, #edf2ef 0%, #f6f4ee 100%); }
+			main { width: min(1120px, 100%); margin: auto; padding: 48px 28px; }
+			h1, h2, p { margin: 0; }
+			h1 { font-family: Georgia, serif; font-size: clamp(2.8rem, 6vw, 5.4rem); line-height: .98; letter-spacing: 0; }
+			h2 { font-family: Georgia, serif; font-size: 1.7rem; line-height: 1.1; }
+			.auth { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+			.eyebrow { color: #18756e; font-size: .72rem; font-weight: 700; letter-spacing: 2px; }
+			.muted, small { color: #6c7975; }
+			.card { background: #fffdf9; border: 1px solid #d9e0da; border-radius: 14px; padding: 32px; box-shadow: 0 16px 40px rgba(32, 57, 52, .08); }
+			.auth-card { width: min(100%, 560px); padding: 44px; }
+			.auth-switch { display: flex; justify-content: flex-end; align-items: center; gap: 6px; color: #6c7975; font-size: .82rem; }
+			.link-button { margin: 0; padding: 0; border: 0; background: transparent; color: #18756e; font-size: inherit; }
+			.link-button:hover:not(:disabled) { background: transparent; color: #105e59; transform: none; text-decoration: underline; }
+			.auth-card h2 { margin: 30px 0 24px; }
+			label { display: block; color: #40524f; font-size: .82rem; font-weight: 700; }
+			input { display: block; width: 100%; margin: 8px 0 18px; padding: 13px 14px; border: 1px solid #cfd9d2; border-radius: 7px; background: #fff; color: #1b2b2a; font: inherit; }
+			input:focus { outline: 3px solid rgba(24, 117, 110, .14); border-color: #18756e; }
+			button { margin-top: 14px; padding: 12px 17px; border: 1px solid transparent; border-radius: 7px; background: #18756e; color: #fff; font: inherit; font-weight: 700; cursor: pointer; transition: transform .15s ease, background .15s ease; }
+			button:hover:not(:disabled) { background: #105e59; transform: translateY(-1px); }
+			button:disabled { cursor: not-allowed; opacity: .55; }
+			.primary { width: 100%; }
+			.outline { background: transparent; color: #18756e; border-color: #b8cbc2; }
+			.outline:hover:not(:disabled) { background: #e7f0eb; color: #105e59; }
+			.message { margin-top: 16px; padding: 11px 12px; border-radius: 7px; background: #edf5f0; color: #236c4d; font-size: .88rem; }
+			.card > small { display: block; margin-top: 18px; font-size: .78rem; line-height: 1.5; }
+			.header { display: flex; justify-content: space-between; align-items: end; gap: 24px; padding-bottom: 28px; border-bottom: 1px solid #d4ded7; }
+			.header h1 { margin-top: 10px; font-size: clamp(2.3rem, 5vw, 4.6rem); }
+			.signout { margin: 0 0 4px; }
+			.grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 24px; margin-top: 28px; align-items: start; }
+			.drop { display: flex; min-height: 210px; margin: 26px 0 0; padding: 28px 18px; align-items: center; justify-content: center; gap: 9px; border: 1px dashed #a9bbb1; border-radius: 10px; background: #f7faf7; color: #40524f; text-align: center; cursor: pointer; }
+			.drop strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+			.drop small { font-size: .76rem; font-weight: 400; }
+			.drop input { display: none; }
+			.upload-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #dcece5; color: #18756e; font-size: 1.5rem; line-height: 1; }
+			.heading, li { display: flex; justify-content: space-between; gap: 18px; }
+			.heading { align-items: center; }
+			.heading h2 { margin-top: 8px; }
+			.count { display: grid; place-items: center; min-width: 36px; height: 36px; border-radius: 50%; background: #f2e2d8; color: #a64c37; }
+			ul { list-style: none; margin: 26px 0 0; padding: 0; }
+			li { align-items: center; padding: 17px 0; border-top: 1px solid #e1e7e2; }
+			li small, li b { display: block; }
+			li b { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+			li small { margin-top: 5px; font-size: .76rem; }
+			em { color: #387443; font-style: normal; font-size: .7rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+			@media (max-width: 760px) {
+				main { padding: 28px 18px; }
+				.auth { padding-top: 20px; }
+				.auth-card { padding: 28px 22px; }
+				.header { align-items: start; }
+				.header h1 { font-size: 2.6rem; }
+			}
+		</style>
+	</head>
+	<body><div id="root"></div><script type="module" src="/src/app.jsx"></script></body>
+</html>
