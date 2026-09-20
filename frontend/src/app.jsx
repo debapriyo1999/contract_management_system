@@ -1,15 +1,107 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-
-const API = "http://127.0.0.1:8000";
+import { AuthLayout } from "./components/AuthLayout";
+import { DocumentList } from "./components/DocumentList";
+import { LoginForm } from "./components/LoginForm";
+import { UploadForm } from "./components/UploadForm";
+import { fetchDocuments, loginUser, uploadDocument } from "./api";
 
 function App() {
-  const [user, setUser] = useState(""), [email, setEmail] = useState(""), [password, setPassword] = useState(""), [file, setFile] = useState(null), [documents, setDocuments] = useState([]), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
-  const load = async (owner = user) => { const response = await fetch(`${API}/documents`, { headers: { "X-User": owner } }); if (response.ok) setDocuments(await response.json()); };
-  const login = async event => { event.preventDefault(); setBusy(true); const response = await fetch(`${API}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }); const data = await response.json(); if (response.ok) { setUser(data.user); await load(data.user); } else setMessage(data.detail); setBusy(false); };
-  const upload = async event => { event.preventDefault(); if (!file) return; setBusy(true); const body = new FormData(); body.append("file", file); const response = await fetch(`${API}/documents/upload`, { method: "POST", headers: { "X-User": user }, body }); const data = await response.json(); setMessage(response.ok ? "Document uploaded." : data.detail); setFile(null); await load(); setBusy(false); };
-  if (!user) return <main className="auth"><section><p className="eyebrow">DOCUMENT DESK</p><h1>Verify every file with confidence.</h1><p className="muted">Upload contracts and track verification in one workspace.</p></section><form className="card" onSubmit={login}><p className="eyebrow">WELCOME BACK</p><h2>Sign in</h2><input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required /><input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required /><button disabled={busy}>{busy ? "Signing in..." : "Continue"}</button>{message && <p className="message">{message}</p>}<small>Demo: demo@example.com / password</small></form></main>;
-  return <main><header className="header"><div><p className="eyebrow">DOCUMENT DESK</p><h1>Verification workspace</h1></div><button className="outline" onClick={() => { setUser(""); setDocuments([]); }}>Sign out</button></header><section className="grid"><form className="card" onSubmit={upload}><p className="eyebrow">NEW REVIEW</p><h2>Upload a document</h2><label className="drop">{file ? file.name : "Choose a PDF, DOCX, or image"}<input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={e => setFile(e.target.files[0])} required /></label><small>Maximum size: 10 MB.</small><button disabled={busy || !file}>Upload</button>{message && <p className="message">{message}</p>}</form><section className="card"><div className="heading"><h2>Documents</h2><strong>{documents.length}</strong></div>{documents.length ? <ul>{documents.map(doc => <li key={doc.sha256}><span><b>{doc.filename}</b><small>{doc.uploaded_at}</small></span><em>{doc.status}</em></li>)}</ul> : <p className="muted">No documents yet.</p>}</section></section></main>;
+  const [user, setUser] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [file, setFile] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadDocuments = async (owner = user) => {
+    if (!owner) return;
+    const items = await fetchDocuments(owner);
+    setDocuments(items);
+  };
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+
+    try {
+      const data = await loginUser(email, password);
+      setUser(data.user);
+      await loadDocuments(data.user);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUpload = async (event) => {
+    event.preventDefault();
+    if (!file) return;
+
+    setBusy(true);
+    setMessage("");
+
+    try {
+      await uploadDocument(user, file);
+      setMessage("Document uploaded.");
+      setFile(null);
+      await loadDocuments();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    setUser("");
+    setDocuments([]);
+    setMessage("");
+    setEmail("");
+    setPassword("");
+  };
+
+  if (!user) {
+    return (
+      <AuthLayout>
+        <LoginForm
+          email={email}
+          password={password}
+          busy={busy}
+          message={message}
+          onEmailChange={setEmail}
+          onPasswordChange={setPassword}
+          onSubmit={handleLogin}
+        />
+      </AuthLayout>
+    );
+  }
+
+  return (
+    <main>
+      <header className="header">
+        <div>
+          <p className="eyebrow">DOCUMENT DESK</p>
+          <h1>Verification workspace</h1>
+        </div>
+        <button className="outline" onClick={handleSignOut}>Sign out</button>
+      </header>
+
+      <section className="grid">
+        <UploadForm
+          file={file}
+          busy={busy}
+          message={message}
+          onFileChange={setFile}
+          onSubmit={handleUpload}
+        />
+        <DocumentList documents={documents} />
+      </section>
+    </main>
+  );
 }
 
 createRoot(document.getElementById("root")).render(<App />);
