@@ -57,13 +57,18 @@ function AuthPanel({ mode, setMode, email, password, busy, message, setEmail, se
 
 function Upload({ file, busy, message, setFile, onSubmit }) {
   return (
-    <form className="card" onSubmit={onSubmit}>
-      <p className="eyebrow">NEW REVIEW</p>
-      <h2>Upload a document</h2>
+    <form className="card upload-card" onSubmit={onSubmit}>
+      <div className="upload-heading">
+        <div>
+          <p className="eyebrow">NEW REVIEW</p>
+          <h2>Upload a document</h2>
+        </div>
+        <span className="file-limit">10 MB max</span>
+      </div>
       <label className="drop">
         <span className="upload-icon">+</span>
         <strong>{file ? file.name : "Choose a file to review"}</strong>
-        <small>PDF, DOCX, PNG, or JPG / up to 10 MB</small>
+        <small>{file ? "File selected and ready to upload" : "PDF, DOCX, PNG, or JPG"}</small>
         <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={(event) => setFile(event.target.files[0])} required />
       </label>
       <button className="primary" disabled={busy || !file}>{busy ? "Uploading..." : "Upload document"}</button>

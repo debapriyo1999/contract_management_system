@@ -42,7 +42,12 @@
 			.header h1 { margin-top: 10px; font-size: clamp(2.3rem, 5vw, 4.6rem); }
 			.signout { margin: 0 0 4px; }
 			.grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 24px; margin-top: 28px; align-items: start; }
-			.drop { display: flex; min-height: 210px; margin: 26px 0 0; padding: 28px 18px; align-items: center; justify-content: center; gap: 9px; border: 1px dashed #a9bbb1; border-radius: 10px; background: #f7faf7; color: #40524f; text-align: center; cursor: pointer; }
+			.upload-card { border-top: 4px solid #18756e; }
+			.upload-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+			.upload-heading h2 { margin-top: 8px; }
+			.file-limit { padding: 6px 9px; border-radius: 5px; background: #edf5f0; color: #387443; font-size: .7rem; font-weight: 700; white-space: nowrap; }
+			.drop { display: flex; flex-direction: column; min-height: 220px; margin: 28px 0 0; padding: 28px 18px; align-items: center; justify-content: center; gap: 10px; border: 1.5px dashed #8eafa2; border-radius: 12px; background: #f7faf7; color: #40524f; text-align: center; cursor: pointer; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
+			.drop:hover { border-color: #18756e; background: #f0f8f4; transform: translateY(-1px); }
 			.drop strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 			.drop small { font-size: .76rem; font-weight: 400; }
 			.drop input { display: none; }
