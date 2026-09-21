@@ -5,6 +5,7 @@ import math
 import os
 import re
 import sqlite3
+from itertools import islice
 from typing import Any
 
 from datasets import load_dataset
@@ -12,9 +13,11 @@ from datasets import load_dataset
 BASE_DIR = Path(__file__).parent
 DATABASE = BASE_DIR / "documents.db"
 UPLOAD_DIR = BASE_DIR / "uploads"
-VECTOR_SIZE = 512
-CUAD_LIMIT = 250
-CUAD_SOURCE_PREFIX = "cuad-v2:"
+CHUNK_SIZE = 900
+CHUNK_OVERLAP = 120
+EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+CHAT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+CUAD_LIMIT = int(os.getenv("CUAD_LIMIT", "10"))
 
 
 def connection() -> sqlite3.Connection:
@@ -27,193 +30,155 @@ def initialize_index() -> None:
     with connection() as database:
         database.execute("""
             CREATE TABLE IF NOT EXISTS rag_chunks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chunk_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source TEXT NOT NULL,
                 owner TEXT,
+                chunk_index INTEGER NOT NULL,
                 content TEXT NOT NULL,
-                vector TEXT NOT NULL,
-                UNIQUE(source, owner)
+                embedding TEXT NOT NULL,
+                UNIQUE(source, chunk_index, owner)
             )
         """)
+        columns = {row[1] for row in database.execute("PRAGMA table_info(rag_chunks)")}
+        if "embedding" not in columns:
+            database.execute("DROP TABLE rag_chunks")
+            database.execute("""
+                CREATE TABLE rag_chunks (
+                    chunk_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source TEXT NOT NULL,
+                    owner TEXT,
+                    chunk_index INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    embedding TEXT NOT NULL,
+                    UNIQUE(source, chunk_index, owner)
+                )
+            """)
 
 
-def tokens(text: str) -> list[str]:
-    return re.findall(r"[a-z0-9]+", text.lower())
+def chunks(text: str) -> list[str]:
+    clean = re.sub(r"\s+", " ", text).strip()
+    return [
+        clean[start:start + CHUNK_SIZE]
+        for start in range(0, len(clean), CHUNK_SIZE - CHUNK_OVERLAP)
+        if clean[start:start + CHUNK_SIZE].strip()
+    ]
 
 
-def vectorize(text: str) -> list[float]:
-    vector = [0.0] * VECTOR_SIZE
-    for token in tokens(text):
-        bucket = int.from_bytes(hashlib.sha256(token.encode()).digest()[:4], "big") % VECTOR_SIZE
+def fallback_embedding(text: str) -> list[float]:
+    vector = [0.0] * 512
+    for token in re.findall(r"[a-z0-9]+", text.lower()):
+        bucket = int.from_bytes(hashlib.sha256(token.encode()).digest()[:4], "big") % len(vector)
         vector[bucket] += 1
     length = math.sqrt(sum(value * value for value in vector)) or 1
     return [value / length for value in vector]
 
 
-def add_chunk(source: str, owner: str | None, content: str) -> None:
-    content = content.strip()
-    if not content:
-        return
+def embeddings(texts: list[str]) -> list[list[float]]:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return [fallback_embedding(text) for text in texts]
+
+    from openai import OpenAI
+
+    options = {"api_key": api_key}
+    if os.getenv("OPENAI_BASE_URL"):
+        options["base_url"] = os.environ["OPENAI_BASE_URL"]
+    response = OpenAI(**options).embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    return [item.embedding for item in response.data]
+
+
+def replace_source(source: str, owner: str | None, text: str) -> int:
+    parts = chunks(text)
+    if not parts:
+        return 0
+    vectors = embeddings(parts)
     with connection() as database:
-        database.execute(
-            "INSERT OR REPLACE INTO rag_chunks (source, owner, content, vector) VALUES (?, ?, ?, ?)",
-            (source, owner, content, json.dumps(vectorize(content))),
+        database.execute("DELETE FROM rag_chunks WHERE source = ? AND owner IS ?", (source, owner))
+        database.executemany(
+            "INSERT INTO rag_chunks (source, owner, chunk_index, content, embedding) VALUES (?, ?, ?, ?, ?)",
+            [(source, owner, index, part, json.dumps(vector)) for index, (part, vector) in enumerate(zip(parts, vectors))],
         )
-
-
-def _record_text(value: Any) -> str:
-    if hasattr(value, "pages"):
-        return "\n".join(page.extract_text() or "" for page in value.pages)
-    if isinstance(value, str):
-        return value
-    if isinstance(value, dict):
-        return " ".join(_record_text(item) for item in value.values())
-    if isinstance(value, list):
-        return " ".join(_record_text(item) for item in value)
-    return str(value)
-
-
-def index_cuad() -> None:
-    if os.getenv("ENABLE_CUAD_INDEXING", "false").lower() != "true":
-        with connection() as database:
-            database.execute("DELETE FROM rag_chunks WHERE source LIKE 'cuad:%'")
-            database.execute("DELETE FROM rag_chunks WHERE source LIKE ?", (f"{CUAD_SOURCE_PREFIX}%",))
-        return
-
-    with connection() as database:
-        exists = database.execute(
-            "SELECT 1 FROM rag_chunks WHERE source LIKE ? LIMIT 1",
-            (f"{CUAD_SOURCE_PREFIX}%",),
-        ).fetchone()
-    if exists:
-        return
-
-    try:
-        with connection() as database:
-            database.execute("DELETE FROM rag_chunks WHERE source LIKE 'cuad:%'")
-        dataset = load_dataset("theatticusproject/cuad", streaming=True)
-        split = dataset["train"] if hasattr(dataset, "keys") else dataset
-        for index, record in enumerate(split):
-            text = _record_text(record)
-            add_chunk(f"{CUAD_SOURCE_PREFIX}{index}", None, text)
-            if index + 1 >= CUAD_LIMIT:
-                break
-    except Exception as error:
-        print(f"CUAD indexing skipped: {error}")
+    return len(parts)
 
 
 def extract_file_text(path: Path) -> str:
     if path.suffix.lower() == ".pdf":
-        try:
-            import pdfplumber
-            with pdfplumber.open(path) as pdf:
-                return "\n".join(page.extract_text() or "" for page in pdf.pages)
-        except Exception:
-            return ""
-    try:
-        return path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return ""
+        import pdfplumber
+        with pdfplumber.open(path) as pdf:
+            return "\n".join(page.extract_text() or "" for page in pdf.pages)
+    if path.suffix.lower() == ".docx":
+        from docx import Document
+        return "\n".join(paragraph.text for paragraph in Document(path).paragraphs)
+    return path.read_text(encoding="utf-8", errors="ignore")
 
 
-def index_uploaded_documents(owner: str) -> None:
-    with connection() as database:
-        documents = database.execute(
-            "SELECT document_id, stored_name FROM documents WHERE owner = ?", (owner,)
-        ).fetchall()
-    for document in documents:
-        path = UPLOAD_DIR / document["stored_name"]
-        add_chunk(f"document:{document['document_id']}", owner, extract_file_text(path))
+def index_uploaded_document(document_id: int, owner: str, stored_name: str) -> int:
+    text = extract_file_text(UPLOAD_DIR / stored_name)
+    return replace_source(f"document:{document_id}", owner, text)
 
 
-def similarity(left: list[float], right: list[float]) -> float:
+def record_text(record: dict[str, Any]) -> str:
+    pdf = record.get("pdf")
+    if hasattr(pdf, "pages"):
+        return "\n".join(page.extract_text() or "" for page in pdf.pages)
+    return " ".join(str(value) for value in record.values() if isinstance(value, str))
+
+
+def index_huggingface_documents() -> int:
+    dataset = load_dataset("theatticusproject/cuad", streaming=True)
+    split = dataset["train"] if hasattr(dataset, "keys") else dataset
+    indexed = 0
+    for index, record in enumerate(islice(split, CUAD_LIMIT if CUAD_LIMIT > 0 else None)):
+        indexed += replace_source(f"cuad:{index}", None, record_text(record))
+    return indexed
+
+
+def cosine(left: list[float], right: list[float]) -> float:
     return sum(a * b for a, b in zip(left, right))
 
 
-def generate_with_openai(question: str, matches: list[tuple[float, sqlite3.Row]]) -> str | None:
+def retrieve(owner: str, question: str, limit: int = 5) -> list[tuple[float, sqlite3.Row]]:
+    query_vector = embeddings([question])[0]
+    with connection() as database:
+        rows = database.execute(
+            "SELECT source, content, embedding FROM rag_chunks WHERE owner IS NULL OR owner = ?",
+            (owner,),
+        ).fetchall()
+    return sorted(
+        ((cosine(query_vector, json.loads(row["embedding"])), row) for row in rows),
+        key=lambda item: item[0],
+        reverse=True,
+    )[:limit]
+
+
+def ask_chatgpt(question: str, matches: list[tuple[float, sqlite3.Row]]) -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return None
+        return matches[0][1]["content"][:800]
 
-    try:
-        from openai import OpenAI
+    from openai import OpenAI
 
-        client_options = {"api_key": api_key}
-        base_url = os.getenv("OPENAI_BASE_URL")
-        if base_url:
-            client_options["base_url"] = base_url
-        client = OpenAI(**client_options)
-        context = "\n\n".join(
-            f"Source: {row['source']}\n{row['content'][:5000]}"
-            for _, row in matches
-        )
-        response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            temperature=0.1,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Answer contract questions only from the supplied context. If the context does not support an answer, say that the information was not found. Do not invent terms, dates, fees, or obligations.",
-                },
-                {
-                    "role": "user",
-                    "content": f"Context:\n{context}\n\nQuestion: {question}",
-                },
-            ],
-        )
-        return response.choices[0].message.content.strip()
-    except Exception:
-        return None
+    options = {"api_key": api_key}
+    if os.getenv("OPENAI_BASE_URL"):
+        options["base_url"] = os.environ["OPENAI_BASE_URL"]
+    context = "\n\n".join(f"[{row['source']}]\n{row['content']}" for _, row in matches)
+    response = OpenAI(**options).chat.completions.create(
+        model=CHAT_MODEL,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": "Answer only from the provided contract context. If it is insufficient, say so. Cite the source IDs used."},
+            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
+        ],
+    )
+    return response.choices[0].message.content.strip()
 
 
 def answer_question(owner: str, question: str) -> dict:
-    initialize_index()
-    index_uploaded_documents(owner)
-    index_cuad()
-    question_vector = vectorize(question)
-
-    with connection() as database:
-        rows = database.execute(
-            "SELECT source, content, vector FROM rag_chunks WHERE owner IS NULL OR owner = ?",
-            (owner,),
-        ).fetchall()
-
-    matches = sorted(
-        ((similarity(question_vector, json.loads(row["vector"])), row) for row in rows),
-        key=lambda item: item[0],
-        reverse=True,
-    )[:3]
-    useful = [(score, row) for score, row in matches if score > 0]
-    if not useful:
-        return {"answer": "I could not find relevant information in the indexed contracts.", "sources": []}
-
-    llm_answer = generate_with_openai(question, useful)
-    if llm_answer:
-        return {
-            "answer": llm_answer,
-            "sources": [
-                {"source": row["source"], "score": round(score, 3)}
-                for score, row in useful
-            ],
-            "llm": True,
-        }
-
-    _, best_row = useful[0]
-    question_terms = set(tokens(question))
-    sentences = re.split(r"(?<=[.!?])\s+", best_row["content"])
-    sentence = max(
-        sentences,
-        key=lambda item: len(question_terms.intersection(tokens(item))),
-        default=best_row["content"],
-    ).strip()
-    if not sentence:
-        sentence = best_row["content"][:500]
-
+    matches = retrieve(owner, question)
+    if not matches or matches[0][0] <= 0:
+        return {"answer": "No indexed contract context was found. Upload and index a document first.", "sources": []}
     return {
-        "answer": sentence[:800],
-        "sources": [
-            {"source": row["source"], "score": round(score, 3)}
-            for score, row in useful
-        ],
-        "llm": False,
+        "answer": ask_chatgpt(question, matches),
+        "sources": [{"source": row["source"], "score": round(score, 3)} for score, row in matches],
+        "llm": bool(os.getenv("OPENAI_API_KEY")),
     }

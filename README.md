@@ -106,9 +106,24 @@ For a document question-answering chatbot, use the uploaded SOW text as the retr
 
 ## Contract chatbot
 
-The chatbot is implemented in `backend/chatbot.py`. It uses a SQLite-backed vector index with deterministic hashed text vectors. On each question it indexes the signed-in user's uploaded documents, then retrieves the most similar chunks. If `OPENAI_API_KEY` is configured, those retrieved chunks are sent to the selected OpenAI-compatible chat model for a grounded response. Without a key, the chatbot uses a local extractive fallback.
+The chatbot is implemented in `backend/chatbot.py` and follows this order:
 
-CUAD indexing is optional because the Hugging Face CUAD repository contains many large contract PDFs and can be slow or unavailable on a restricted network. Enable it only when required with `$env:ENABLE_CUAD_INDEXING = "true"`; uploaded documents remain the primary chatbot knowledge source by default.
+```text
+Upload document
+	-> extract PDF/DOCX/text content
+	-> split content into overlapping chunks
+	-> create embeddings
+	-> store chunks and embeddings in SQLite
+User question
+	-> create a question embedding
+	-> retrieve the closest SQLite chunks
+	-> send retrieved chunks plus the question to ChatGPT
+	-> display the answer and source IDs in the React UI
+```
+
+With `OPENAI_API_KEY`, both document/question embeddings and ChatGPT answers use OpenAI. Without a key, the project uses deterministic local embeddings and returns the best retrieved chunk so the pipeline can still be tested offline.
+
+CUAD indexing is started from the **Load CUAD** button in the document list, or by calling `POST /chat/index-huggingface`. It downloads the configured number of streamed CUAD records (`CUAD_LIMIT`, default `10`), extracts their PDF text, chunks it, embeds it, and stores it in SQLite. Set `$env:CUAD_LIMIT = "0"` to process the full available stream, although this can take a long time and requires reliable network access. Uploaded documents are indexed immediately when upload completes.
 
 To enable OpenAI generation for the backend process:
 
