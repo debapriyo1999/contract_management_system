@@ -62,12 +62,24 @@
 			li b { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 			li small { margin-top: 5px; font-size: .76rem; }
 			em { color: #387443; font-style: normal; font-size: .7rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+			.document-actions { display: flex; align-items: center; gap: 10px; }
+			.delete-button { margin: 0; padding: 6px 9px; background: transparent; border-color: #e0b5aa; color: #a64c37; font-size: .72rem; }
+			.delete-button:hover:not(:disabled) { background: #fff0eb; color: #8b3828; }
+			.chat-box { margin-top: 32px; padding-top: 26px; border-top: 1px solid #e1e7e2; }
+			.chat-box h3 { margin: 8px 0 14px; font-family: Georgia, serif; font-size: 1.25rem; }
+			.chat-input { display: flex; gap: 8px; align-items: start; }
+			.chat-input input { margin: 0; }
+			.chat-input button { width: auto; margin: 0; white-space: nowrap; }
+			.answer { margin-top: 14px; padding: 13px; border-left: 3px solid #18756e; background: #f0f8f4; color: #40524f; font-size: .88rem; line-height: 1.5; }
 			@media (max-width: 760px) {
 				main { padding: 28px 18px; }
 				.auth { padding-top: 20px; }
 				.auth-card { padding: 28px 22px; }
 				.header { align-items: start; }
 				.header h1 { font-size: 2.6rem; }
+				.chat-input { flex-direction: column; }
+				.chat-input button { width: 100%; }
+				.document-actions { align-items: end; flex-direction: column; gap: 6px; }
 			}
 		</style>
 	</head>

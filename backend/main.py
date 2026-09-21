@@ -3,7 +3,9 @@ from pathlib import Path
 import hashlib
 import secrets
 import sqlite3
+import uvicorn
 
+from chatbot import answer_question, initialize_index
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -48,10 +50,14 @@ def initialize_database() -> None:
         """)
 
 initialize_database()
+initialize_index()
 
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+class ChatRequest(BaseModel):
+    question: str
 
 def password_hash(password: str, salt: str) -> str:
     return hashlib.pbkdf2_hmac(
@@ -100,6 +106,40 @@ def list_documents(x_user: str | None = Header(default=None)) -> list[dict]:
         ).fetchall()
     return [dict(row) for row in rows]
 
+@app.delete("/documents/{sha256}")
+def delete_document(
+    sha256: str,
+    x_user: str | None = Header(default=None),
+) -> dict[str, str]:
+    if not x_user:
+        raise HTTPException(status_code=401, detail="User header is required")
+    with db_connection() as connection:
+        document = connection.execute(
+            "SELECT stored_name, status FROM documents WHERE sha256 = ? AND owner = ?",
+            (sha256, x_user),
+        ).fetchone()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        if document["status"].lower() != "pending":
+            raise HTTPException(status_code=409, detail="Only pending documents can be deleted")
+        connection.execute("DELETE FROM documents WHERE sha256 = ? AND owner = ?", (sha256, x_user))
+    (UPLOAD_DIR / document["stored_name"]).unlink(missing_ok=True)
+    with db_connection() as connection:
+        connection.execute("DELETE FROM rag_chunks WHERE source = ? AND owner = ?", (f"document:{sha256}", x_user))
+    return {"message": "Document deleted"}
+
+@app.post("/chat/question")
+def chat_question(
+    request: ChatRequest,
+    x_user: str | None = Header(default=None),
+) -> dict:
+    if not x_user:
+        raise HTTPException(status_code=401, detail="User header is required")
+    question = request.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required")
+    return answer_question(x_user, question)
+
 @app.post("/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -131,3 +171,6 @@ async def upload_document(
             (document["sha256"], document["filename"], document["stored_name"], document["status"], document["uploaded_at"], document["owner"]),
         )
     return {key: value for key, value in document.items() if key != "owner"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)

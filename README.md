@@ -96,6 +96,20 @@ Do not delete `documents.db` unless you intentionally want to remove all registe
 
 React handles the sign-in, account creation, upload form, and document list. FastAPI handles password hashing, SQLite queries, file validation, and storage. Passwords are stored as salted PBKDF2-SHA256 hashes rather than plain text.
 
+## Starter SOW chatbot dataset
+
+The file `datasets/sow_qa.jsonl` contains six synthetic Statements of Work with grounded question-answer examples. It is safe for development testing and includes scope, deliverables, timelines, fees, assumptions, exclusions, and service terms.
+
+This is a starter dataset, not legal advice or a substitute for approved company contracts. For production use, add only contracts that you are authorized to process, remove confidential personal information, and preserve document identifiers so chatbot answers can cite their source.
+
+For a document question-answering chatbot, use the uploaded SOW text as the retrieval source and use the included QA pairs for evaluation. Retrieval-augmented generation (RAG) is generally a better fit than training a model from scratch for a small or changing contract library.
+
+## Contract chatbot
+
+The chatbot is implemented in `backend/chatbot.py`. It uses a SQLite-backed vector index with deterministic hashed text vectors. On the first question it indexes up to 250 streamed CUAD records and the signed-in user's uploaded documents, retrieves the most similar chunks, and returns an extractive answer with source IDs. It does not require an external model API key.
+
+The document list includes an **Ask a question** form. Only documents with `Pending` status can be deleted; deletion removes both the stored file and its database metadata.
+
 ## Legacy manual startup
 
 The backend can also be started after activating the environment:

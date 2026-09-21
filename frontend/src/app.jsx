@@ -35,6 +35,17 @@ const uploadDocument = (owner, file) => {
   });
 };
 
+const askQuestion = (owner, question) => request("/chat/question", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-User": owner },
+  body: JSON.stringify({ question })
+});
+
+const deleteDocument = (owner, sha256) => request(`/documents/${sha256}`, {
+  method: "DELETE",
+  headers: { "X-User": owner }
+});
+
 function AuthPanel({ mode, setMode, email, password, busy, message, setEmail, setPassword, onSubmit }) {
   return (
     <form className="card auth-card" onSubmit={onSubmit}>
@@ -77,16 +88,48 @@ function Upload({ file, busy, message, setFile, onSubmit }) {
   );
 }
 
-function Documents({ documents }) {
+function Documents({ user, documents, onDelete }) {
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+
+  const handleQuestion = async (event) => {
+    event.preventDefault();
+    if (!question.trim()) return;
+    setChatBusy(true);
+    setAnswer("");
+    try {
+      const result = await askQuestion(user, question);
+      setAnswer(result.answer);
+    } catch (error) {
+      setAnswer(error.message);
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
   return (
     <section className="card">
       <div className="heading"><div><p className="eyebrow">YOUR FILES</p><h2>Documents</h2></div><strong className="count">{documents.length}</strong></div>
       {documents.length ? <ul>{documents.map((doc) => (
         <li key={doc.sha256}>
           <span><b>{doc.filename}</b><small>{doc.uploaded_at}</small></span>
-          <em>{doc.status}</em>
+          <span className="document-actions">
+            <em>{doc.status}</em>
+            {doc.status.toLowerCase() === "pending" && <button className="delete-button" onClick={() => onDelete(doc.sha256)}>Delete</button>}
+          </span>
         </li>
       ))}</ul> : <p className="muted">No documents yet.</p>}
+
+      <form className="chat-box" onSubmit={handleQuestion}>
+        <p className="eyebrow">ASK YOUR CONTRACTS</p>
+        <h3>Ask a question</h3>
+        <div className="chat-input">
+          <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="What are the payment terms?" />
+          <button className="primary" disabled={chatBusy || !question.trim()}>{chatBusy ? "Thinking..." : "Ask"}</button>
+        </div>
+        {answer && <p className="answer">{answer}</p>}
+      </form>
     </section>
   );
 }
@@ -142,6 +185,16 @@ function App() {
     }
   };
 
+  const handleDelete = async (sha256) => {
+    try {
+      await deleteDocument(user, sha256);
+      await loadDocuments();
+      setMessage("Pending document deleted.");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+
   const handleSignOut = () => {
     setUser("");
     setDocuments([]);
@@ -170,7 +223,7 @@ function App() {
 
       <section className="grid">
         <Upload {...{ file, busy, message, setFile }} onSubmit={handleUpload} />
-        <Documents documents={documents} />
+        <Documents user={user} documents={documents} onDelete={handleDelete} />
       </section>
     </main>
   );
