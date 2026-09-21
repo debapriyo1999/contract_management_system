@@ -106,7 +106,19 @@ For a document question-answering chatbot, use the uploaded SOW text as the retr
 
 ## Contract chatbot
 
-The chatbot is implemented in `backend/chatbot.py`. It uses a SQLite-backed vector index with deterministic hashed text vectors. On the first question it indexes up to 250 streamed CUAD records and the signed-in user's uploaded documents, retrieves the most similar chunks, and returns an extractive answer with source IDs. It does not require an external model API key.
+The chatbot is implemented in `backend/chatbot.py`. It uses a SQLite-backed vector index with deterministic hashed text vectors. On each question it indexes the signed-in user's uploaded documents, then retrieves the most similar chunks. If `OPENAI_API_KEY` is configured, those retrieved chunks are sent to the selected OpenAI-compatible chat model for a grounded response. Without a key, the chatbot uses a local extractive fallback.
+
+CUAD indexing is optional because the Hugging Face CUAD repository contains many large contract PDFs and can be slow or unavailable on a restricted network. Enable it only when required with `$env:ENABLE_CUAD_INDEXING = "true"`; uploaded documents remain the primary chatbot knowledge source by default.
+
+To enable OpenAI generation for the backend process:
+
+```powershell
+$env:OPENAI_API_KEY = "your-api-key"
+$env:OPENAI_MODEL = "gpt-4o-mini"
+.venv\Scripts\python.exe -m uvicorn main:app --port 8000
+```
+
+For an OpenAI-compatible external provider, also set `OPENAI_BASE_URL` to that provider's chat API base URL. Never commit API keys to the repository. The retrieved contract context is sent to the configured provider, so confirm that your data-sharing and privacy requirements allow this.
 
 The document list includes an **Ask a question** form. Only documents with `Pending` status can be deleted; deletion removes both the stored file and its database metadata.
 
