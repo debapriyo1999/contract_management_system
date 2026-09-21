@@ -41,7 +41,7 @@ const askQuestion = (owner, question) => request("/chat/question", {
   body: JSON.stringify({ question })
 });
 
-const deleteDocument = (owner, sha256) => request(`/documents/${sha256}`, {
+const deleteDocument = (owner, documentId) => request(`/documents/${documentId}`, {
   method: "DELETE",
   headers: { "X-User": owner }
 });
@@ -112,11 +112,11 @@ function Documents({ user, documents, onDelete }) {
     <section className="card">
       <div className="heading"><div><p className="eyebrow">YOUR FILES</p><h2>Documents</h2></div><strong className="count">{documents.length}</strong></div>
       {documents.length ? <ul>{documents.map((doc) => (
-        <li key={doc.sha256}>
+        <li key={doc.document_id}>
           <span><b>{doc.filename}</b><small>{doc.uploaded_at}</small></span>
           <span className="document-actions">
             <em>{doc.status}</em>
-            {doc.status.toLowerCase() === "pending" && <button className="delete-button" onClick={() => onDelete(doc.sha256)}>Delete</button>}
+            {doc.status.toLowerCase() === "pending" && <button className="delete-button" onClick={() => onDelete(doc.document_id)}>Delete</button>}
           </span>
         </li>
       ))}</ul> : <p className="muted">No documents yet.</p>}
@@ -185,9 +185,9 @@ function App() {
     }
   };
 
-  const handleDelete = async (sha256) => {
+  const handleDelete = async (documentId) => {
     try {
-      await deleteDocument(user, sha256);
+      await deleteDocument(user, documentId);
       await loadDocuments();
       setMessage("Pending document deleted.");
     } catch (error) {

@@ -36,7 +36,7 @@ export function Dashboard({ user, documents, onSignOut, onUpload, file, busy, me
           {documents.length ? (
             <ul>
               {documents.map((doc) => (
-                <li key={doc.sha256}>
+                <li key={doc.document_id}>
                   <span>
                     <b>{doc.filename}</b>
                     <small>{doc.uploaded_at}</small>

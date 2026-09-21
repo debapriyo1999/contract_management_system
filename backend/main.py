@@ -40,7 +40,7 @@ def initialize_database() -> None:
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS documents (
-                sha256 TEXT PRIMARY KEY,
+                document_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 filename TEXT NOT NULL,
                 stored_name TEXT NOT NULL,
                 status TEXT NOT NULL,
@@ -48,6 +48,23 @@ def initialize_database() -> None:
                 owner TEXT NOT NULL REFERENCES users(email)
             );
         """)
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(documents)")}
+        if "document_id" not in columns:
+            connection.executescript("""
+                CREATE TABLE documents_new (
+                    document_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    filename TEXT NOT NULL,
+                    stored_name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    uploaded_at TEXT NOT NULL,
+                    owner TEXT NOT NULL REFERENCES users(email)
+                );
+                INSERT INTO documents_new (filename, stored_name, status, uploaded_at, owner)
+                    SELECT filename, stored_name, status, uploaded_at, owner FROM documents;
+                DROP TABLE documents;
+                ALTER TABLE documents_new RENAME TO documents;
+            """)
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner)")
 
 initialize_database()
 initialize_index()
@@ -101,31 +118,31 @@ def list_documents(x_user: str | None = Header(default=None)) -> list[dict]:
         raise HTTPException(status_code=401, detail="User header is required")
     with db_connection() as connection:
         rows = connection.execute(
-            "SELECT filename, stored_name, sha256, status, uploaded_at FROM documents WHERE owner = ? ORDER BY uploaded_at DESC",
+            "SELECT document_id, filename, stored_name, status, uploaded_at FROM documents WHERE owner = ? ORDER BY uploaded_at DESC",
             (x_user,),
         ).fetchall()
     return [dict(row) for row in rows]
 
-@app.delete("/documents/{sha256}")
+@app.delete("/documents/{document_id}")
 def delete_document(
-    sha256: str,
+    document_id: int,
     x_user: str | None = Header(default=None),
 ) -> dict[str, str]:
     if not x_user:
         raise HTTPException(status_code=401, detail="User header is required")
     with db_connection() as connection:
         document = connection.execute(
-            "SELECT stored_name, status FROM documents WHERE sha256 = ? AND owner = ?",
-            (sha256, x_user),
+            "SELECT stored_name, status FROM documents WHERE document_id = ? AND owner = ?",
+            (document_id, x_user),
         ).fetchone()
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         if document["status"].lower() != "pending":
             raise HTTPException(status_code=409, detail="Only pending documents can be deleted")
-        connection.execute("DELETE FROM documents WHERE sha256 = ? AND owner = ?", (sha256, x_user))
+        connection.execute("DELETE FROM documents WHERE document_id = ? AND owner = ?", (document_id, x_user))
     (UPLOAD_DIR / document["stored_name"]).unlink(missing_ok=True)
     with db_connection() as connection:
-        connection.execute("DELETE FROM rag_chunks WHERE source = ? AND owner = ?", (f"document:{sha256}", x_user))
+        connection.execute("DELETE FROM rag_chunks WHERE source = ? AND owner = ?", (f"document:{document_id}", x_user))
     return {"message": "Document deleted"}
 
 @app.post("/chat/question")
@@ -154,22 +171,24 @@ async def upload_document(
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File is larger than 10 MB")
 
-    file_hash = hashlib.sha256(content).hexdigest()
-    stored_name = f"{file_hash}{extension}"
-    (UPLOAD_DIR / stored_name).write_bytes(content)
     document = {
         "filename": file.filename,
-        "stored_name": stored_name,
-        "sha256": file_hash,
+        "stored_name": "",
         "status": "Pending",
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "owner": x_user,
     }
     with db_connection() as connection:
         connection.execute(
-            "INSERT OR REPLACE INTO documents (sha256, filename, stored_name, status, uploaded_at, owner) VALUES (?, ?, ?, ?, ?, ?)",
-            (document["sha256"], document["filename"], document["stored_name"], document["status"], document["uploaded_at"], document["owner"]),
+            "INSERT INTO documents (filename, stored_name, status, uploaded_at, owner) VALUES (?, ?, ?, ?, ?)",
+            (document["filename"], document["stored_name"], document["status"], document["uploaded_at"], document["owner"]),
         )
+        document_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+        stored_name = f"{document_id}{extension}"
+        connection.execute("UPDATE documents SET stored_name = ? WHERE document_id = ?", (stored_name, document_id))
+    (UPLOAD_DIR / stored_name).write_bytes(content)
+    document["document_id"] = document_id
+    document["stored_name"] = stored_name
     return {key: value for key, value in document.items() if key != "owner"}
 
 if __name__ == "__main__":

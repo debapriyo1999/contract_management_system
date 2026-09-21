@@ -119,11 +119,11 @@ def extract_file_text(path: Path) -> str:
 def index_uploaded_documents(owner: str) -> None:
     with connection() as database:
         documents = database.execute(
-            "SELECT sha256, stored_name FROM documents WHERE owner = ?", (owner,)
+            "SELECT document_id, stored_name FROM documents WHERE owner = ?", (owner,)
         ).fetchall()
     for document in documents:
         path = UPLOAD_DIR / document["stored_name"]
-        add_chunk(f"document:{document['sha256']}", owner, extract_file_text(path))
+        add_chunk(f"document:{document['document_id']}", owner, extract_file_text(path))
 
 
 def similarity(left: list[float], right: list[float]) -> float:
