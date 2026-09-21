@@ -41,11 +41,6 @@ const askQuestion = (owner, question) => request("/chat/question", {
   body: JSON.stringify({ question })
 });
 
-const indexHuggingFace = (owner) => request("/chat/index-huggingface", {
-  method: "POST",
-  headers: { "X-User": owner }
-});
-
 const deleteDocument = (owner, documentId) => request(`/documents/${documentId}`, {
   method: "DELETE",
   headers: { "X-User": owner }
@@ -97,7 +92,6 @@ function Documents({ user, documents, onDelete }) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
-  const [cuadBusy, setCuadBusy] = useState(false);
 
   const handleQuestion = async (event) => {
     event.preventDefault();
@@ -111,18 +105,6 @@ function Documents({ user, documents, onDelete }) {
       setAnswer(error.message);
     } finally {
       setChatBusy(false);
-    }
-  };
-
-  const handleCuadIndex = async () => {
-    setCuadBusy(true);
-    try {
-      const result = await indexHuggingFace(user);
-      setAnswer(`Hugging Face contracts indexed: ${result.chunks} chunks.`);
-    } catch (error) {
-      setAnswer(error.message);
-    } finally {
-      setCuadBusy(false);
     }
   };
 
@@ -140,12 +122,7 @@ function Documents({ user, documents, onDelete }) {
       ))}</ul> : <p className="muted">No documents yet.</p>}
 
       <div className="chat-box">
-        <div className="chat-heading">
-          <div><p className="eyebrow">ASK YOUR CONTRACTS</p><h3>Ask a question</h3></div>
-          <button type="button" className="outline index-button" onClick={handleCuadIndex} disabled={cuadBusy}>
-            {cuadBusy ? "Indexing..." : "Load CUAD"}
-          </button>
-        </div>
+        <div className="chat-heading"><div><p className="eyebrow">ASK YOUR CONTRACTS</p><h3>Ask a question</h3></div></div>
         <form onSubmit={handleQuestion}>
         <div className="chat-input">
           <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="What are the payment terms?" />

@@ -5,7 +5,7 @@ import secrets
 import sqlite3
 import uvicorn
 
-from chatbot import answer_question, index_huggingface_documents, index_uploaded_document, initialize_index
+from chatbot import answer_question, index_uploaded_document, initialize_index
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -75,9 +75,6 @@ class LoginRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
-
-class IndexResponse(BaseModel):
-    chunks: int
 
 def password_hash(password: str, salt: str) -> str:
     return hashlib.pbkdf2_hmac(
@@ -159,12 +156,6 @@ def chat_question(
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")
     return answer_question(x_user, question)
-
-@app.post("/chat/index-huggingface", response_model=IndexResponse)
-def index_huggingface(x_user: str | None = Header(default=None)) -> dict[str, int]:
-    if not x_user:
-        raise HTTPException(status_code=401, detail="User header is required")
-    return {"chunks": index_huggingface_documents()}
 
 @app.post("/documents/upload")
 async def upload_document(

@@ -5,10 +5,6 @@ import math
 import os
 import re
 import sqlite3
-from itertools import islice
-from typing import Any
-
-from datasets import load_dataset
 
 BASE_DIR = Path(__file__).parent
 DATABASE = BASE_DIR / "documents.db"
@@ -17,7 +13,6 @@ CHUNK_SIZE = 900
 CHUNK_OVERLAP = 120
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 CHAT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-CUAD_LIMIT = int(os.getenv("CUAD_LIMIT", "10"))
 
 
 def connection() -> sqlite3.Connection:
@@ -117,20 +112,23 @@ def index_uploaded_document(document_id: int, owner: str, stored_name: str) -> i
     return replace_source(f"document:{document_id}", owner, text)
 
 
-def record_text(record: dict[str, Any]) -> str:
+def index_user_documents(owner: str) -> int:
+    with connection() as database:
+        documents = database.execute(
+            "SELECT document_id, stored_name FROM documents WHERE owner = ?",
+            (owner,),
+        ).fetchall()
+    return sum(
+        index_uploaded_document(document["document_id"], owner, document["stored_name"])
+        for document in documents
+    )
+
+
+def record_text(record: dict) -> str:
     pdf = record.get("pdf")
     if hasattr(pdf, "pages"):
         return "\n".join(page.extract_text() or "" for page in pdf.pages)
     return " ".join(str(value) for value in record.values() if isinstance(value, str))
-
-
-def index_huggingface_documents() -> int:
-    dataset = load_dataset("theatticusproject/cuad", streaming=True)
-    split = dataset["train"] if hasattr(dataset, "keys") else dataset
-    indexed = 0
-    for index, record in enumerate(islice(split, CUAD_LIMIT if CUAD_LIMIT > 0 else None)):
-        indexed += replace_source(f"cuad:{index}", None, record_text(record))
-    return indexed
 
 
 def cosine(left: list[float], right: list[float]) -> float:
@@ -174,6 +172,8 @@ def ask_chatgpt(question: str, matches: list[tuple[float, sqlite3.Row]]) -> str:
 
 
 def answer_question(owner: str, question: str) -> dict:
+    initialize_index()
+    index_user_documents(owner)
     matches = retrieve(owner, question)
     if not matches or matches[0][0] <= 0:
         return {"answer": "No indexed contract context was found. Upload and index a document first.", "sources": []}

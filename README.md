@@ -123,7 +123,20 @@ User question
 
 With `OPENAI_API_KEY`, both document/question embeddings and ChatGPT answers use OpenAI. Without a key, the project uses deterministic local embeddings and returns the best retrieved chunk so the pipeline can still be tested offline.
 
-CUAD indexing is started from the **Load CUAD** button in the document list, or by calling `POST /chat/index-huggingface`. It downloads the configured number of streamed CUAD records (`CUAD_LIMIT`, default `10`), extracts their PDF text, chunks it, embeds it, and stores it in SQLite. Set `$env:CUAD_LIMIT = "0"` to process the full available stream, although this can take a long time and requires reliable network access. Uploaded documents are indexed immediately when upload completes.
+CUAD is indexed once by `backend/index_cuad.py`, not when the backend starts and not for every chatbot question. The script downloads the streamed CUAD records, extracts their PDF text, chunks it, embeds it, and stores the chunks in SQLite. Run it from the `backend` folder:
+
+```powershell
+.venv\Scripts\python.exe index_cuad.py
+```
+
+The default `CUAD_LIMIT=0` processes the full dataset. For a smaller test run, set a limit first:
+
+```powershell
+$env:CUAD_LIMIT = "10"
+.venv\Scripts\python.exe index_cuad.py
+```
+
+After indexing finishes, normal backend restarts and chatbot questions use the existing SQLite vector database and do not contact Hugging Face. Uploaded documents are indexed immediately when upload completes.
 
 To enable OpenAI generation for the backend process:
 
